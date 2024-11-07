@@ -13,8 +13,8 @@ import {
     duration_regex,
     moderation_entry,
     moderation_type,
-    parse_duration,
-    reply_with_error,
+    parse_nullable_duration,
+    reply_with_error, parse_duration,
 } from "./moderation-common.js";
 import Modlogs from "./modlogs.js";
 import { TextBasedCommandBuilder } from "../../command-abstractions/text-based-command-builder.js";
@@ -48,7 +48,7 @@ export default class Timeout extends ModerationComponent {
                             title: "duration",
                             description: "Duration",
                             regex: duration_regex,
-                            required: false,
+                            required: true,
                         })
                         .add_string_option({
                             title: "reason",
@@ -96,23 +96,23 @@ export default class Timeout extends ModerationComponent {
     async timeout_add_handler(
         command: TextBasedCommand,
         user: Discord.User,
-        duration: string | null,
+        duration_string: string,
         reason: string | null,
     ) {
         try {
             if (this.wheatley.is_authorized_mod(user)) {
-                await reply_with_error(command, "Cannot apply moderation to user");
-                return;
+                return reply_with_error(command, "Cannot apply moderation to user");
             }
             const base_moderation: basic_moderation_with_user = { type: "timeout", user: user.id };
             if (await this.is_moderation_applied(base_moderation)) {
-                await reply_with_error(command, "User is already timed-out");
-                return;
+                return reply_with_error(command, "User is already timed-out");
             }
-            const duration_ms = parse_duration(duration);
-            if (duration_ms == null || duration_ms > 28 * DAY) {
-                await reply_with_error(command, "Maximum allowable duration is 28 days");
-                return;
+            const duration_ms = parse_nullable_duration(duration_string);
+            if (duration_ms == null) {
+                return reply_with_error(command, "Invalid duration");
+            }
+            if (duration_ms > 28 * DAY) {
+                return reply_with_error(command, "Maximum allowable duration is 28 days");
             }
             const moderation: moderation_entry = {
                 case_number: -1,
@@ -130,7 +130,7 @@ export default class Timeout extends ModerationComponent {
                 link: command.get_or_forge_url(),
             };
             await this.register_new_moderation(moderation);
-            await this.reply_and_notify(command, user, "timed-out", moderation, duration === null, reason === null);
+            await this.reply_and_notify(command, user, "timed-out", moderation, false, reason === null);
         } catch (e) {
             await reply_with_error(command, "Error applying timeout");
             critical_error(e);

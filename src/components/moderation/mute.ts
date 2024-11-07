@@ -12,8 +12,8 @@ import {
     duration_regex,
     moderation_entry,
     moderation_type,
-    parse_duration,
     reply_with_error,
+    parse_nullable_duration,
 } from "./moderation-common.js";
 import Modlogs from "./modlogs.js";
 import { TextBasedCommandBuilder } from "../../command-abstractions/text-based-command-builder.js";
@@ -89,16 +89,18 @@ export default class Mute extends ModerationComponent {
         return member.roles.cache.filter(role => role.id == this.wheatley.roles.muted.id).size > 0;
     }
 
-    async mute_handler(command: TextBasedCommand, user: Discord.User, duration: string | null, reason: string | null) {
+    async mute_handler(command: TextBasedCommand, user: Discord.User, duration_string: string | null, reason: string | null) {
         try {
             if (this.wheatley.is_authorized_mod(user)) {
-                await reply_with_error(command, "Cannot apply moderation to user");
-                return;
+                return reply_with_error(command, "Cannot apply moderation to user");
             }
             const base_moderation: basic_moderation_with_user = { type: "mute", user: user.id };
             if (await this.is_moderation_applied(base_moderation)) {
-                await reply_with_error(command, "User is already muted");
-                return;
+                return reply_with_error(command, "User is already muted");
+            }
+            let duration_ms = parse_nullable_duration(duration_string)
+            if (duration_ms == null) {
+                return reply_with_error(command, "Invalid duration");
             }
             const moderation: moderation_entry = {
                 case_number: -1,
@@ -109,14 +111,14 @@ export default class Mute extends ModerationComponent {
                 type: "mute",
                 reason,
                 issued_at: Date.now(),
-                duration: parse_duration(duration),
+                duration: duration_ms == Infinity ? null : duration_ms,
                 active: true,
                 removed: null,
                 expunged: null,
                 link: command.get_or_forge_url(),
             };
             await this.register_new_moderation(moderation);
-            await this.reply_and_notify(command, user, "muted", moderation, duration === null, reason === null);
+            await this.reply_and_notify(command, user, "muted", moderation, duration_string === null, reason === null);
         } catch (e) {
             await reply_with_error(command, "Error applying mute");
             critical_error(e);

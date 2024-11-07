@@ -12,7 +12,7 @@ import {
     basic_moderation_with_user,
     duration_regex,
     moderation_entry,
-    parse_duration,
+    parse_nullable_duration,
     reply_with_error,
 } from "./moderation-common.js";
 import Modlogs from "./modlogs.js";
@@ -150,13 +150,12 @@ export default class Rolepersist extends ModerationComponent {
         command: TextBasedCommand,
         user: Discord.User,
         role: Discord.Role,
-        duration: string | null,
+        duration_string: string | null,
         reason: string | null,
     ) {
         try {
             if (this.wheatley.is_authorized_mod(user)) {
-                await reply_with_error(command, "Cannot apply moderation to user");
-                return;
+                return reply_with_error(command, "Cannot apply moderation to user");
             }
             const base_moderation: basic_moderation_with_user = {
                 type: "rolepersist",
@@ -165,8 +164,11 @@ export default class Rolepersist extends ModerationComponent {
                 role_name: role.name,
             };
             if (await this.is_moderation_applied(base_moderation)) {
-                await reply_with_error(command, "User is already role-persisted with this role");
-                return;
+                return reply_with_error(command, "User is already role-persisted with this role");
+            }
+            let duration_ms = parse_nullable_duration(duration_string)
+            if (duration_ms == null) {
+                return reply_with_error(command, "Invalid duration");
             }
             const moderation: moderation_entry = {
                 case_number: -1,
@@ -179,7 +181,7 @@ export default class Rolepersist extends ModerationComponent {
                 role_name: role.name,
                 reason,
                 issued_at: Date.now(),
-                duration: parse_duration(duration),
+                duration: duration_ms == Infinity ? null : duration_ms,
                 active: true,
                 removed: null,
                 expunged: null,
@@ -191,7 +193,7 @@ export default class Rolepersist extends ModerationComponent {
                 user,
                 "role-persisted",
                 moderation,
-                duration === null,
+                duration_string === null,
                 reason === null,
             );
         } catch (e) {

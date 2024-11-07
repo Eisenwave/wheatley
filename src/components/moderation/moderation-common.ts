@@ -81,48 +81,76 @@ export type moderation_entry = basic_moderation & {
     link: string | null;
 };
 
-export const duration_regex = /(?:perm\b|(\d+)\s*([mhdwMys]))/;
+export const duration_regex = /perm\b|permanent\b|(\d+)\s*([a-zA-Z]+)/;
 
-// returns duration in ms
-function parse_unit(u: string) {
+function millis_of_time_unit(u: string) {
     let factor = 1;
     switch (u) {
         case "y":
+        case "year":
+        case "years":
             factor *= 365; // 365 days, fallthrough
         case "d":
+        case "day":
+        case "days":
             factor *= 24; // 24 hours, fallthrough
         case "h":
+        case "hr":
+        case "hour":
+        case "hours":
             factor *= 60; // 60 minutes, fallthrough
         case "m":
+        case "min":
+        case "mins":
+        case "minute":
+        case "minutes":
             factor *= 60; // 60 seconds, fallthrough
         case "s":
+        case "sec":
+        case "secs":
+        case "seconds":
             factor *= 1000; // 1000 ms
             break;
         // Weeks and months can't be folded into the above as nicely
         case "w":
-            factor *= 7 * parse_unit("d");
+        case "week":
+        case "weeks":
+            factor *= 7 * millis_of_time_unit("d")!;
             break;
         case "M":
-            factor *= 30 * parse_unit("d");
+        case "month":
+        case "months":
+            factor *= 30 * millis_of_time_unit("d")!;
             break;
         default:
-            assert(false, "Unexpected unit");
+            return null;
     }
     return factor;
 }
 
-export function parse_duration(duration: string | null) {
+// Returns the corresponding duration in milliseconds,
+// or Infinity for permanent duration,
+// or null if parsing failed.
+export function parse_duration(duration: string) {
     if (duration === null) {
         return null;
     }
     const match = duration.match(duration_regex);
     assert(match);
-    if (duration == "perm") {
-        return null;
+    if (duration == "perm" || duration == "permanent") {
+        return Infinity;
     } else {
         const [_, n, unit] = match;
-        return parseInt(n) * parse_unit(unit);
+        let unit_millis = millis_of_time_unit(unit)
+        return unit_millis != null ? parseInt(n) * unit_millis : null;
     }
+}
+
+// Returns the corresponding duration in milliseconds,
+// or Infinity for permanent duration or if the input is null,
+// or null if parsing failed.
+export function parse_nullable_duration(duration: string | null) {
+    return duration != null ? parse_duration(duration) : Infinity
 }
 
 export async function reply_with_error(command: TextBasedCommand, message: string) {
